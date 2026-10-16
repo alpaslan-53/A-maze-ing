@@ -2,7 +2,7 @@
 
 import random
 
-from mazegen.model import ALL_WALLS, Cell, Direction
+from mazegen.model import ALL_WALLS, Cell, DIRECTIONS, Direction
 
 
 class MazeGenerator:
@@ -36,6 +36,7 @@ class MazeGenerator:
         self.solution_cells: list[Cell] = []
         self.pattern_cells: set[Cell] = set()
         self.pattern_drawn: bool = False
+        self._rng: random.Random = random.Random(self.seed)
 
     def _in_bounds(self, x: int, y: int) -> bool:
         """Check if coordinates (x, y) are within the maze bounds."""
@@ -49,8 +50,31 @@ class MazeGenerator:
             self.grid[y][x] &= ~direction.bit
             self.grid[ny][nx] &= ~direction.opposite_bit
 
+    def _carve_dfs(self, start_x: int, start_y: int) -> None:
+        """Carve maze passages using randomized Depth-First Search."""
+        visited: set[Cell] = {(start_x, start_y)}
+        stack: list[Cell] = [(start_x, start_y)]
+
+        while stack:
+            cx, cy = stack[-1]
+            unvisited: list[tuple[Direction, int, int]] = []
+            for d in DIRECTIONS:
+                nx: int = cx + d.dx
+                ny: int = cy + d.dy
+                if self._in_bounds(nx, ny) and (nx, ny) not in visited:
+                    unvisited.append((d, nx, ny))
+
+            if unvisited:
+                direction, nx, ny = self._rng.choice(unvisited)
+                self._open_wall(cx, cy, direction)
+                visited.add((nx, ny))
+                stack.append((nx, ny))
+            else:
+                stack.pop()
+
     def generate(self) -> "MazeGenerator":
-        """Generate a closed maze grid where all cells have full walls."""
+        """Generate a random maze grid using seeded DFS algorithm."""
+        self._rng.seed(self.seed)
         grid: list[list[int]] = []
         for _ in range(self.height):
             row: list[int] = []
@@ -58,4 +82,6 @@ class MazeGenerator:
                 row.append(ALL_WALLS)
             grid.append(row)
         self.grid = grid
+
+        self._carve_dfs(self.entry[0], self.entry[1])
         return self
