@@ -41,6 +41,14 @@ class MazeGenerator:
         """Check if coordinates (x, y) are within the maze bounds."""
         return 0 <= x < self.width and 0 <= y < self.height
 
+    def _open_wall(self, x: int, y: int, direction: Direction) -> None:
+        """Open the wall between cell (x, y) and its neighbor in direction."""
+        nx: int = x + direction.dx
+        ny: int = y + direction.dy
+        if self._in_bounds(nx, ny):
+            self.grid[y][x] &= ~direction.bit
+            self.grid[ny][nx] &= ~direction.opposite_bit
+
     def generate(self) -> "MazeGenerator":
         """Generate a closed maze grid where all cells have full walls."""
         grid: list[list[int]] = []
