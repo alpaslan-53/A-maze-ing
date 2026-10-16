@@ -2,7 +2,7 @@
 
 import random
 
-from mazegen.model import ALL_WALLS, Cell
+from mazegen.model import ALL_WALLS, Cell, Direction
 
 
 class MazeGenerator:
@@ -36,6 +36,10 @@ class MazeGenerator:
         self.solution_cells: list[Cell] = []
         self.pattern_cells: set[Cell] = set()
         self.pattern_drawn: bool = False
+
+    def _in_bounds(self, x: int, y: int) -> bool:
+        """Check if coordinates (x, y) are within the maze bounds."""
+        return 0 <= x < self.width and 0 <= y < self.height
 
     def generate(self) -> "MazeGenerator":
         """Generate a closed maze grid where all cells have full walls."""
