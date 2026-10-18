@@ -1,0 +1,21 @@
+# A-Maze-ing varsayilan konfigurasyon dosyasi
+# Format: KEY=VALUE (# ile baslayan satirlar yorumdur)
+
+# Labirent boyutlari (hucre sayisi)
+WIDTH=20
+HEIGHT=15
+
+# Giris ve cikis koordinatlari (x,y formati, 0 tabanli)
+ENTRY=0,0
+EXIT=19,14
+
+# Cikti dosyasi (hexadecimal formatta kaydedilecek dosya adi)
+OUTPUT_FILE=maze.txt
+
+# Labirent tipi:
+# True  = Mukemmel labirent (dongusuz, giris-cikis arasi tek bir yol)
+# False = Pac-Man modu (en az 2 bagimsiz yol/dongu iceren oynanabilir labirent)
+PERFECT=True
+
+# Istege bagli: Tekrar uretilebilirlik icin rastgelelik tohumu (seed)
+SEED=42
