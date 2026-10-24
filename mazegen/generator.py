@@ -1,5 +1,6 @@
 """Maze generator module implementing the MazeGenerator class."""
 
+from collections import deque
 import random
 
 from mazegen.model import ALL_WALLS, Cell, DIRECTIONS, Direction
@@ -72,6 +73,50 @@ class MazeGenerator:
             else:
                 stack.pop()
 
+    def _solve_bfs(self) -> None:
+        """Find the shortest path from entry to exit using BFS."""
+        if self.entry == self.exit:
+            self.solution = ""
+            self.solution_cells = [self.entry]
+            return
+
+        queue: deque[Cell] = deque([self.entry])
+        visited: set[Cell] = {self.entry}
+        parent: dict[Cell, tuple[Cell, str]] = {}
+
+        while queue:
+            cx, cy = queue.popleft()
+            if (cx, cy) == self.exit:
+                break
+
+            for d in DIRECTIONS:
+                # Duvar açık mı? (bit 0 ise duvar yok demektir)
+                if not (self.grid[cy][cx] & d.bit):
+                    nx: int = cx + d.dx
+                    ny: int = cy + d.dy
+                    if self._in_bounds(nx, ny) and (nx, ny) not in visited:
+                        visited.add((nx, ny))
+                        parent[(nx, ny)] = ((cx, cy), d.name)
+                        queue.append((nx, ny))
+
+        # Çıkıştan girişe geri izleme (backtracking)
+        curr: Cell = self.exit
+        path_cells: list[Cell] = [curr]
+        path_chars: list[str] = []
+
+        while curr != self.entry:
+            if curr not in parent:
+                return
+            prev_cell, char = parent[curr]
+            path_chars.append(char)
+            path_cells.append(prev_cell)
+            curr = prev_cell
+
+        path_chars.reverse()
+        path_cells.reverse()
+        self.solution = "".join(path_chars)
+        self.solution_cells = path_cells
+
     def generate(self) -> "MazeGenerator":
         """Generate a random maze grid using seeded DFS algorithm."""
         self._rng.seed(self.seed)
@@ -84,4 +129,5 @@ class MazeGenerator:
         self.grid = grid
 
         self._carve_dfs(self.entry[0], self.entry[1])
+        self._solve_bfs()
         return self
