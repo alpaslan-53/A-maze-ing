@@ -91,6 +91,7 @@ class MazeGenerator:
     def _carve_dfs(self, start_x: int, start_y: int) -> None:
         """Carve maze passages using randomized Depth-First Search."""
         visited: set[Cell] = {(start_x, start_y)}
+        visited.update(self.pattern_cells)
         stack: list[Cell] = [(start_x, start_y)]
 
         while stack:
@@ -165,6 +166,7 @@ class MazeGenerator:
             grid.append(row)
         self.grid = grid
 
+        self._place_pattern()
         self._carve_dfs(self.entry[0], self.entry[1])
         self._solve_bfs()
         return self
