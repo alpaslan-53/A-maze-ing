@@ -23,6 +23,7 @@ PATTERN_WIDTH: int = 7
 PATTERN_HEIGHT: int = 5
 MIN_WIDTH_FOR_PATTERN: int = 9
 MIN_HEIGHT_FOR_PATTERN: int = 7
+MIN_LOOPS: int = 2
 
 
 class MazeGenerator:
@@ -158,6 +159,83 @@ class MazeGenerator:
             candidates.append(d)
         return candidates
 
+    def count_loops(self) -> int:
+        """Return the number of independent loops in the maze."""
+        passages: int = 0
+        cells_count: int = 0
+        for y in range(self.height):
+            for x in range(self.width):
+                if (x, y) in self.pattern_cells:
+                    continue
+                cells_count += 1
+                if (
+                    x + 1 < self.width
+                    and (x + 1, y) not in self.pattern_cells
+                ):
+                    if not (self.grid[y][x] & EAST):
+                        passages += 1
+                if (
+                    y + 1 < self.height
+                    and (x, y + 1) not in self.pattern_cells
+                ):
+                    if not (self.grid[y][x] & SOUTH):
+                        passages += 1
+        if cells_count == 0:
+            return 0
+        return max(0, passages - cells_count + 1)
+
+    def count_dead_ends(self) -> int:
+        """Return the number of dead-end cells."""
+        return sum(
+            1
+            for y in range(self.height)
+            for x in range(self.width)
+            if self._is_dead_end(x, y)
+        )
+
+    def _remove_dead_ends(self) -> None:
+        """Open walls at dead-ends to eliminate dead ends."""
+        dead_ends: list[Cell] = [
+            (x, y)
+            for y in range(self.height)
+            for x in range(self.width)
+            if self._is_dead_end(x, y)
+        ]
+        self._rng.shuffle(dead_ends)
+        for x, y in dead_ends:
+            if not self._is_dead_end(x, y):
+                continue
+            candidates = self._wall_candidates(x, y)
+            if not candidates:
+                continue
+            best = [
+                d for d in candidates
+                if self._is_dead_end(x + d.dx, y + d.dy)
+            ]
+            d = self._rng.choice(best if best else candidates)
+            self._open_wall(x, y, d)
+
+    def _add_minimum_loops(self) -> None:
+        """Ensure the maze has at least MIN_LOOPS independent loops."""
+        cells: list[Cell] = [
+            (x, y)
+            for y in range(self.height)
+            for x in range(self.width)
+            if (x, y) not in self.pattern_cells
+        ]
+        self._rng.shuffle(cells)
+        for x, y in cells:
+            if self.count_loops() >= MIN_LOOPS:
+                return
+            candidates = self._wall_candidates(x, y)
+            if candidates:
+                self._open_wall(x, y, self._rng.choice(candidates))
+
+    def _braid(self) -> None:
+        """Add loops and reduce dead-ends for Pac-Man mode."""
+        self._remove_dead_ends()
+        self._add_minimum_loops()
+
     def _carve_dfs(self, start_x: int, start_y: int) -> None:
         """Carve maze passages using randomized Depth-First Search."""
         visited: set[Cell] = {(start_x, start_y)}
@@ -238,5 +316,7 @@ class MazeGenerator:
 
         self._place_pattern()
         self._carve_dfs(self.entry[0], self.entry[1])
+        if not self.perfect:
+            self._braid()
         self._solve_bfs()
         return self
