@@ -60,6 +60,18 @@ class MazeGenerator:
         self.pattern_cells: set[Cell] = set()
         self.pattern_drawn: bool = False
         self._rng: random.Random = random.Random(self.seed)
+        self._validate_basic()
+
+    def _validate_basic(self) -> None:
+        """Validate maze dimensions and boundary conditions."""
+        if self.width < 2 or self.height < 2:
+            raise ValueError("width and height must be at least 2")
+        if not self._in_bounds(self.entry[0], self.entry[1]):
+            raise ValueError(f"entry {self.entry} is outside the maze")
+        if not self._in_bounds(self.exit[0], self.exit[1]):
+            raise ValueError(f"exit {self.exit} is outside the maze")
+        if self.entry == self.exit:
+            raise ValueError("entry and exit must be different cells")
 
     def _place_pattern(self) -> None:
         """Place the '42' pattern in the center if dimensions allow."""
