@@ -1,0 +1,25 @@
+# Python bayt kodlari ve onbellekler
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Statik tip kontrolu ve test onbellekleri
+.mypy_cache/
+.pytest_cache/
+
+# Paketleme ve dagitim klasorleri
+build/
+dist/
+*.egg-info/
+
+# Sanal ortamlar (virtual environments)
+venv/
+.venv/
+env/
+
+# Olusturulan labirent cikti dosyalari
+maze.txt
+output_maze.txt
+
+# PDF Chapter VI Kurali: Kok dizindeki mazegen wheel paketi depoda yer almalidir
+!mazegen-*.whl
