@@ -27,12 +27,14 @@ class MazeGenerator:
         height: int,
         entry: Cell = (0, 0),
         exit: Cell | None = None,
+        perfect: bool = False,
         seed: int | None = None,
     ) -> None:
         """Initialize the maze generator with dimensions and options."""
         self.width: int = width
         self.height: int = height
         self.entry: Cell = entry
+        self.perfect: bool = perfect
 
         if exit is not None:
             self.exit: Cell = exit
@@ -87,6 +89,25 @@ class MazeGenerator:
         if self._in_bounds(nx, ny):
             self.grid[y][x] &= ~direction.bit
             self.grid[ny][nx] &= ~direction.opposite_bit
+
+    def _close_wall(self, x: int, y: int, direction: Direction) -> None:
+        """Close the wall between cell (x, y) and its neighbor in direction."""
+        nx: int = x + direction.dx
+        ny: int = y + direction.dy
+        if self._in_bounds(nx, ny):
+            self.grid[y][x] |= direction.bit
+            self.grid[ny][nx] |= direction.opposite_bit
+
+    def _open_count(self, x: int, y: int) -> int:
+        """Return the number of open passages of a cell."""
+        closed_walls: int = bin(self.grid[y][x]).count("1")
+        return 4 - closed_walls
+
+    def _is_dead_end(self, x: int, y: int) -> bool:
+        """Return True if the cell has exactly one open passage."""
+        if (x, y) in self.pattern_cells:
+            return False
+        return self._open_count(x, y) == 1
 
     def _carve_dfs(self, start_x: int, start_y: int) -> None:
         """Carve maze passages using randomized Depth-First Search."""
