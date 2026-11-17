@@ -5,6 +5,18 @@ import random
 
 from mazegen.model import ALL_WALLS, Cell, DIRECTIONS, Direction
 
+PATTERN_42: tuple[str, ...] = (
+    "X.X.XXX",
+    "X.X...X",
+    "XXX.XXX",
+    "..X.X..",
+    "..X.XXX",
+)
+PATTERN_WIDTH: int = 7
+PATTERN_HEIGHT: int = 5
+MIN_WIDTH_FOR_PATTERN: int = 9
+MIN_HEIGHT_FOR_PATTERN: int = 7
+
 
 class MazeGenerator:
     """Generates and solves 2D rectangular mazes."""
@@ -39,6 +51,31 @@ class MazeGenerator:
         self.pattern_drawn: bool = False
         self._rng: random.Random = random.Random(self.seed)
 
+    def _place_pattern(self) -> None:
+        """Place the '42' pattern in the center if dimensions allow."""
+        if (
+            self.width < MIN_WIDTH_FOR_PATTERN
+            or self.height < MIN_HEIGHT_FOR_PATTERN
+        ):
+            self.pattern_drawn = False
+            print("Notice: Maze size is too small to draw the '42' pattern.")
+            return
+
+        start_x: int = (self.width - PATTERN_WIDTH) // 2
+        start_y: int = (self.height - PATTERN_HEIGHT) // 2
+        cells: set[Cell] = set()
+
+        for r, row in enumerate(PATTERN_42):
+            for c, char in enumerate(row):
+                if char == "X":
+                    cells.add((start_x + c, start_y + r))
+
+        if self.entry in cells or self.exit in cells:
+            raise ValueError("Entry or exit cannot be inside the 42 pattern.")
+
+        self.pattern_cells = cells
+        self.pattern_drawn = True
+
     def _in_bounds(self, x: int, y: int) -> bool:
         """Check if coordinates (x, y) are within the maze bounds."""
         return 0 <= x < self.width and 0 <= y < self.height
@@ -54,6 +91,7 @@ class MazeGenerator:
     def _carve_dfs(self, start_x: int, start_y: int) -> None:
         """Carve maze passages using randomized Depth-First Search."""
         visited: set[Cell] = {(start_x, start_y)}
+        visited.update(self.pattern_cells)
         stack: list[Cell] = [(start_x, start_y)]
 
         while stack:
@@ -128,6 +166,7 @@ class MazeGenerator:
             grid.append(row)
         self.grid = grid
 
+        self._place_pattern()
         self._carve_dfs(self.entry[0], self.entry[1])
         self._solve_bfs()
         return self
