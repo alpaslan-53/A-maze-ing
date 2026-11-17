@@ -3,7 +3,14 @@
 from collections import deque
 import random
 
-from mazegen.model import ALL_WALLS, Cell, DIRECTIONS, Direction
+from mazegen.model import (
+    ALL_WALLS,
+    Cell,
+    DIRECTIONS,
+    Direction,
+    EAST,
+    SOUTH,
+)
 
 PATTERN_42: tuple[str, ...] = (
     "X.X.XXX",
@@ -108,6 +115,48 @@ class MazeGenerator:
         if (x, y) in self.pattern_cells:
             return False
         return self._open_count(x, y) == 1
+
+    def _block_is_open(self, bx: int, by: int) -> bool:
+        """Return True if the 3x3 block at (bx, by) has no inner walls."""
+        if bx < 0 or by < 0 or bx + 3 > self.width or by + 3 > self.height:
+            return False
+        for y in range(by, by + 3):
+            for x in range(bx, bx + 3):
+                if x < bx + 2 and (self.grid[y][x] & EAST):
+                    return False
+                if y < by + 2 and (self.grid[y][x] & SOUTH):
+                    return False
+        return True
+
+    def _makes_open_area(self, x: int, y: int, direction: Direction) -> bool:
+        """Check if opening a wall would create an illegal 3x3 open area."""
+        nx: int = x + direction.dx
+        ny: int = y + direction.dy
+        self._open_wall(x, y, direction)
+        found: bool = False
+        for by in range(max(y, ny) - 2, min(y, ny) + 1):
+            for bx in range(max(x, nx) - 2, min(x, nx) + 1):
+                if self._block_is_open(bx, by):
+                    found = True
+        self._close_wall(x, y, direction)
+        return found
+
+    def _wall_candidates(self, x: int, y: int) -> list[Direction]:
+        """Return closed walls of (x, y) that can safely be opened."""
+        candidates: list[Direction] = []
+        for d in DIRECTIONS:
+            nx: int = x + d.dx
+            ny: int = y + d.dy
+            if not self._in_bounds(nx, ny):
+                continue
+            if (nx, ny) in self.pattern_cells:
+                continue
+            if not (self.grid[y][x] & d.bit):
+                continue
+            if self._makes_open_area(x, y, d):
+                continue
+            candidates.append(d)
+        return candidates
 
     def _carve_dfs(self, start_x: int, start_y: int) -> None:
         """Carve maze passages using randomized Depth-First Search."""
