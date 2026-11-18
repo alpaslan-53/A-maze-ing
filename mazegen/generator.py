@@ -120,7 +120,7 @@ class MazeGenerator:
 
     def _open_count(self, x: int, y: int) -> int:
         """Return the number of open passages of a cell."""
-        closed_walls: int = bin(self.grid[y][x]).count("1")
+        closed_walls: int = self.grid[y][x].bit_count()
         return 4 - closed_walls
 
     def _is_dead_end(self, x: int, y: int) -> bool:
