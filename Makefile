@@ -4,7 +4,7 @@ CONFIG = config.txt
 MYPY_FLAGS = --warn-return-any --warn-unused-ignores \
 	--ignore-missing-imports --disallow-untyped-defs --check-untyped-defs
 
-.PHONY: install run debug clean lint lint-strict test
+.PHONY: install run debug clean lint lint-strict
 
 # Bagimliliklari yukler
 install:
@@ -32,7 +32,3 @@ lint:
 lint-strict:
 	flake8 .
 	mypy . --strict
-
-# Birim testleri calistirir
-test:
-	$(PYTHON) -m pytest -q
