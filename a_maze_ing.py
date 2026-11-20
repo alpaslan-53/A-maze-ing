@@ -15,17 +15,14 @@ from mazegen import MazeGenerator
 
 def build_maze(config: MazeConfig, seed: int | None) -> MazeGenerator:
     """Create and generate a maze from the settings."""
-    kwargs: dict[str, object] = {
-        "width": config.width,
-        "height": config.height,
-        "entry": config.entry,
-        "exit": config.exit,
-        "seed": seed,
-    }
-    try:
-        maze = MazeGenerator(**kwargs, perfect=config.perfect)  # type: ignore
-    except TypeError:
-        maze = MazeGenerator(**kwargs)  # type: ignore
+    maze = MazeGenerator(
+        width=config.width,
+        height=config.height,
+        entry=config.entry,
+        exit=config.exit,
+        seed=seed,
+        perfect=config.perfect,
+    )
     maze.generate()
     return maze
 
