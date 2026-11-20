@@ -13,8 +13,8 @@ from mazegen.model import (
 )
 
 PATTERN_42: tuple[str, ...] = (
-    "X.X.XXX",
-    "X.X...X",
+    "X...XXX",
+    "X.....X",
     "XXX.XXX",
     "..X.X..",
     "..X.XXX",
@@ -173,7 +173,7 @@ class MazeGenerator:
 
     def count_loops(self) -> int:
         """Return the number of independent loops in the maze."""
-        passages: int = 0
+        open_hall: int = 0
         cells_count: int = 0
         for y in range(self.height):
             for x in range(self.width):
@@ -185,25 +185,16 @@ class MazeGenerator:
                     and (x + 1, y) not in self.pattern_cells
                 ):
                     if not (self.grid[y][x] & EAST):
-                        passages += 1
+                        open_hall += 1
                 if (
                     y + 1 < self.height
                     and (x, y + 1) not in self.pattern_cells
                 ):
                     if not (self.grid[y][x] & SOUTH):
-                        passages += 1
+                        open_hall += 1
         if cells_count == 0:
             return 0
-        return max(0, passages - cells_count + 1)
-
-    def count_dead_ends(self) -> int:
-        """Return the number of dead-end cells."""
-        return sum(
-            1
-            for y in range(self.height)
-            for x in range(self.width)
-            if self._is_dead_end(x, y)
-        )
+        return max(0, open_hall - cells_count + 1)
 
     def _remove_dead_ends(self) -> None:
         """Open walls at dead-ends to eliminate dead ends."""
@@ -288,7 +279,6 @@ class MazeGenerator:
                 break
 
             for d in DIRECTIONS:
-                # Duvar açık mı? (bit 0 ise duvar yok demektir)
                 if not (self.grid[cy][cx] & d.bit):
                     nx: int = cx + d.dx
                     ny: int = cy + d.dy
@@ -297,7 +287,6 @@ class MazeGenerator:
                         parent[(nx, ny)] = ((cx, cy), d.name)
                         queue.append((nx, ny))
 
-        # Çıkıştan girişe geri izleme (backtracking)
         curr: Cell = self.exit
         path_cells: list[Cell] = [curr]
         path_chars: list[str] = []
