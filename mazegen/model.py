@@ -5,8 +5,6 @@ Defines wall bitmasks, cell coordinates, and cardinal directions.
 
 from typing import NamedTuple
 
-# Wall bit constants according to the subject specifications:
-# Bit 0 (1): North, Bit 1 (2): East, Bit 2 (4): South, Bit 3 (8): West.
 NORTH: int = 1
 EAST: int = 2
 SOUTH: int = 4
