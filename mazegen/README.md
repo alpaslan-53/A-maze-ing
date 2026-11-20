@@ -64,7 +64,6 @@ Useful attributes:
 * `gen.pattern_cells`: Coordinates belonging to the "42" pattern (`set[Cell]`).
 * `gen.pattern_drawn`: Whether the "42" pattern was drawn (`bool`).
 * `gen.count_loops()`: Returns the number of independent loops.
-* `gen.count_dead_ends()`: Returns the number of dead-end cells.
 
 ## Accessing the Solution
 
