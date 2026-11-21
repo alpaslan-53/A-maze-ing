@@ -2,16 +2,25 @@
 
 from dataclasses import dataclass
 
+REQUIRED_KEYS = (
+    "WIDTH",
+    "HEIGHT",
+    "ENTRY",
+    "EXIT",
+    "OUTPUT_FILE",
+    "PERFECT",
+)
+
 
 class ConfigError(ValueError):
-    """Raised when configuration values are malformed or missing."""
+    """Raised when configuration values are invalid or missing."""
 
     pass
 
 
 @dataclass(frozen=True)
 class MazeConfig:
-    """Immutable container holding validated maze settings."""
+    """Container holding validated maze settings."""
 
     width: int
     height: int
@@ -22,120 +31,157 @@ class MazeConfig:
     seed: int | None = None
 
 
-def read_pairs(path: str) -> dict[str, str]:
-    """Extract raw key-value definitions from the specified file."""
+def read_config_file(file_path: str) -> dict[str, str]:
+    """Read KEY=VALUE pairs from the configuration file."""
     try:
-        with open(path, "r", encoding="utf-8") as file_handle:
-            raw_lines = file_handle.readlines()
-    except OSError as err:
-        raise ConfigError(f"Cannot read config file '{path}': {err}")
-
-    config_map: dict[str, str] = {}
-    for line_idx, raw_line in enumerate(raw_lines, start=1):
-        content = raw_line.strip()
-        if not content or content.startswith("#"):
-            continue
-        if "=" not in content:
-            raise ConfigError(f"Line {line_idx}: missing '=' in '{content}'")
-        key_part, val_part = content.split("=", 1)
-        key, val = key_part.strip(), val_part.strip()
-        if not key or not val:
-            raise ConfigError(
-                f"Line {line_idx}: empty key or value in '{content}'"
-            )
-        if key in config_map:
-            raise ConfigError(f"Line {line_idx}: duplicate key '{key}'")
-        config_map[key] = val
-    return config_map
-
-
-def to_int(name: str, value: str) -> int:
-    """Parse positive numerical digit string into an integer."""
-    if not value.isascii() or not value.isdigit():
+        with open(file_path, "r", encoding="utf-8") as file:
+            lines = file.readlines()
+    except OSError as error:
         raise ConfigError(
-            f"'{name}' must be a non-negative integer, got '{value}'"
+            f"Cannot open configuration file '{file_path}': {error}"
+        )
+    except UnicodeDecodeError:
+        raise ConfigError(
+            f"'{file_path}' is not a readable text file. "
+            "Please save it as plain UTF-8 text."
+        )
+
+    settings: dict[str, str] = {}
+    for line_number, raw_line in enumerate(lines, start=1):
+        line = raw_line.strip()
+        if line == "" or line.startswith("#"):
+            continue
+
+        if "=" not in line:
+            raise ConfigError(
+                f"Line {line_number}: invalid format in '{line}'. "
+                "Every line must be in 'KEY=VALUE' format."
+            )
+
+        key_part, value_part = line.split("=", 1)
+        key = key_part.strip()
+        value = value_part.strip()
+
+        if key == "" or value == "":
+            raise ConfigError(
+                f"Line {line_number}: empty key or value in '{line}'. "
+                "Please provide both a key and a value."
+            )
+
+        if key in settings:
+            raise ConfigError(
+                f"Line {line_number}: duplicate key '{key}'. "
+                "Each setting can only be defined once."
+            )
+
+        settings[key] = value
+
+    return settings
+
+
+def convert_to_int(key_name: str, value: str) -> int:
+    """Convert a digit string to an integer with clear error messages."""
+    if value.startswith("-") and value[1:].isdigit():
+        raise ConfigError(
+            f"Invalid value for '{key_name}': '{value}'. "
+            "Negative numbers are not allowed; "
+            "please enter zero or a positive number."
+        )
+    if not (value.isascii() and value.isdigit()):
+        raise ConfigError(
+            f"Invalid value for '{key_name}': '{value}'. "
+            "Please enter a valid number using digits only (e.g. 10)."
         )
     return int(value)
 
 
-def parse_coord(name: str, value: str) -> tuple[int, int]:
-    """Convert comma-separated coordinates 'x,y' into an integer pair."""
-    segments = value.split(",")
-    if len(segments) != 2:
+def convert_to_coord(key_name: str, value: str) -> tuple[int, int]:
+    """Convert 'x,y' text into an (x, y) integer tuple."""
+    parts = value.split(",")
+    if len(parts) != 2:
         raise ConfigError(
-            f"'{name}' must be in 'x,y' format, got '{value}'"
+            f"Invalid coordinates for '{key_name}': '{value}'. "
+            "Coordinates must be written as two numbers separated by a comma "
+            "(e.g. 0,0)."
         )
-    coord_x = to_int(f"{name}.x", segments[0].strip())
-    coord_y = to_int(f"{name}.y", segments[1].strip())
-    return (coord_x, coord_y)
+    x_pos = convert_to_int(f"{key_name} (x)", parts[0].strip())
+    y_pos = convert_to_int(f"{key_name} (y)", parts[1].strip())
+    return (x_pos, y_pos)
 
 
-def parse_bool(name: str, value: str) -> bool:
-    """Convert explicit boolean string to native bool."""
+def convert_to_bool(key_name: str, value: str) -> bool:
+    """Convert 'True' or 'False' text into a boolean value."""
     if value == "True":
         return True
     if value == "False":
         return False
     raise ConfigError(
-        f"'{name}' must be 'True' or 'False', got '{value}'"
+        f"Invalid value for '{key_name}': '{value}'. "
+        "Please enter strictly 'True' or 'False'."
     )
 
 
-REQUIRED_KEYS = {
-    "WIDTH", "HEIGHT", "ENTRY", "EXIT", "OUTPUT_FILE", "PERFECT"
-}
+def load_config(file_path: str) -> MazeConfig:
+    """Read, validate, and return the maze configuration."""
+    settings = read_config_file(file_path)
 
+    for key in REQUIRED_KEYS:
+        if key not in settings:
+            raise ConfigError(
+                f"Missing required setting: '{key}' was not found in the file."
+            )
 
-def load_config(path: str) -> MazeConfig:
-    """Parse config file, enforce validation rules, and return config."""
-    config_map = read_pairs(path)
+    width = convert_to_int("WIDTH", settings["WIDTH"])
+    height = convert_to_int("HEIGHT", settings["HEIGHT"])
 
-    missing_keys = REQUIRED_KEYS - set(config_map.keys())
-    if missing_keys:
-        formatted = ", ".join(sorted(missing_keys))
-        raise ConfigError(f"Missing required key(s): {formatted}")
-
-    maze_w = to_int("WIDTH", config_map["WIDTH"])
-    maze_h = to_int("HEIGHT", config_map["HEIGHT"])
-    if maze_w < 2 or maze_h < 2:
+    if width < 2 or height < 2:
         raise ConfigError(
-            f"Dimensions must be at least 2x2, got {maze_w}x{maze_h}"
+            f"Maze dimensions are too small ({width}x{height}). "
+            "Minimum allowed size is 2x2."
         )
-    if maze_w > 500 or maze_h > 500:
+    if width > 500 or height > 500:
         raise ConfigError(
-            f"Dimensions exceed maximum 500x500, got {maze_w}x{maze_h}"
+            f"Maze dimensions are too large ({width}x{height}). "
+            "Maximum allowed size is 500x500."
         )
 
-    start_cell = parse_coord("ENTRY", config_map["ENTRY"])
-    end_cell = parse_coord("EXIT", config_map["EXIT"])
+    entry_point = convert_to_coord("ENTRY", settings["ENTRY"])
+    exit_point = convert_to_coord("EXIT", settings["EXIT"])
 
-    if not (0 <= start_cell[0] < maze_w and 0 <= start_cell[1] < maze_h):
+    entry_x, entry_y = entry_point
+    if entry_x >= width or entry_y >= height:
         raise ConfigError(
-            f"ENTRY {start_cell} is outside the maze "
-            f"(0..{maze_w - 1}, 0..{maze_h - 1})"
+            f"ENTRY ({entry_x},{entry_y}) is outside the maze boundaries. "
+            f"Valid range is x: 0..{width - 1}, y: 0..{height - 1}."
         )
-    if not (0 <= end_cell[0] < maze_w and 0 <= end_cell[1] < maze_h):
-        raise ConfigError(
-            f"EXIT {end_cell} is outside the maze "
-            f"(0..{maze_w - 1}, 0..{maze_h - 1})"
-        )
-    if start_cell == end_cell:
-        raise ConfigError(f"ENTRY and EXIT cannot be identical: {start_cell}")
 
-    target_file = config_map["OUTPUT_FILE"]
-    is_perfect = parse_bool("PERFECT", config_map["PERFECT"])
-    random_seed = (
-        to_int("SEED", config_map["SEED"])
-        if "SEED" in config_map
-        else None
-    )
+    exit_x, exit_y = exit_point
+    if exit_x >= width or exit_y >= height:
+        raise ConfigError(
+            f"EXIT ({exit_x},{exit_y}) is outside the maze boundaries. "
+            f"Valid range is x: 0..{width - 1}, y: 0..{height - 1}."
+        )
+
+    if entry_point == exit_point:
+        raise ConfigError(
+            f"ENTRY and EXIT cannot be at the same position: {entry_point}. "
+            "Please choose two different coordinates."
+        )
+
+    output_file = settings["OUTPUT_FILE"]
+    perfect = convert_to_bool("PERFECT", settings["PERFECT"])
+
+    if "SEED" in settings:
+        seed_value: int | None = convert_to_int("SEED", settings["SEED"])
+    else:
+        seed_value = None
 
     return MazeConfig(
-        width=maze_w,
-        height=maze_h,
-        entry=start_cell,
-        exit=end_cell,
-        output_file=target_file,
-        perfect=is_perfect,
-        seed=random_seed,
+        width=width,
+        height=height,
+        entry=entry_point,
+        exit=exit_point,
+        output_file=output_file,
+        perfect=perfect,
+        seed=seed_value,
     )
