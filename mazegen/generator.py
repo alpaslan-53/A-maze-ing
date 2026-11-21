@@ -315,10 +315,13 @@ class MazeGenerator:
     def generate(self) -> "MazeGenerator":
         """Build the maze layout and calculate its solution."""
         self._rng.seed(self.seed)
-        self.grid = [
-            [ALL_WALLS for _ in range(self.width)]
-            for _ in range(self.height)
-        ]
+        grid: list[list[int]] = []
+        for _ in range(self.height):
+            row: list[int] = []
+            for _ in range(self.width):
+                row.append(ALL_WALLS)
+            grid.append(row)
+        self.grid = grid
         self._place_pattern()
         self._carve_dfs(self.entry[0], self.entry[1])
         if not self.perfect:
