@@ -39,7 +39,6 @@ python3 a_maze_ing.py config.txt
 - `make debug`: run the program under the Python debugger (`pdb`).
 - `make lint`: run `flake8` and `mypy` checks with project flags.
 - `make lint-strict`: run `flake8` and `mypy --strict`.
-- `make test`: run the automated test suite (`pytest`).
 - `make clean`: remove temporary caches and build artifacts.
 
 ### Configuration (config.txt)
@@ -147,9 +146,8 @@ The project was developed collaboratively by two team members using feature
 branches and Pull Request code reviews:
 
 - **alterzi (Person A)**: core maze model (`mazegen/model.py`), generation and
-  solving algorithms (`mazegen/generator.py`), algorithm unit tests
-  (`tests/test_generator.py`), packaging (`pyproject.toml`, `LICENSE.md`,
-  `mazegen/README.md`, `.whl`).
+  solving algorithms (`mazegen/generator.py`), packaging (`pyproject.toml`,
+  `LICENSE.md`, `mazegen/README.md`, `.whl`).
 - **bbalci (Person B)**: repository setup (`.gitignore`, `.flake8`,
   `Makefile`, `config.txt`), configuration validation (`config_parser.py`),
   hex file writer (`maze_writer.py`), terminal display and menu
