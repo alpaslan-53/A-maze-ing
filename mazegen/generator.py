@@ -1,4 +1,4 @@
-"""Maze generator module implementing the MazeGenerator class."""
+"""Maze generator module providing generation, loop injection, and solving."""
 
 from collections import deque
 import random
@@ -27,7 +27,7 @@ MIN_LOOPS: int = 2
 
 
 class MazeGenerator:
-    """Generates and solves 2D rectangular mazes."""
+    """Core generator that builds and solves grid-based mazes."""
 
     def __init__(
         self,
@@ -38,7 +38,7 @@ class MazeGenerator:
         perfect: bool = False,
         seed: int | None = None,
     ) -> None:
-        """Initialize the maze generator with dimensions and options."""
+        """Configure maze parameters and initialize state."""
         self.width: int = width
         self.height: int = height
         self.entry: Cell = entry
@@ -63,7 +63,7 @@ class MazeGenerator:
         self._validate_basic()
 
     def _validate_basic(self) -> None:
-        """Validate maze dimensions and boundary conditions."""
+        """Verify dimensional parameters and cell bounds."""
         if self.width < 2 or self.height < 2:
             raise ValueError("width and height must be at least 2")
         if not self._in_bounds(self.entry[0], self.entry[1]):
@@ -74,7 +74,7 @@ class MazeGenerator:
             raise ValueError("entry and exit must be different cells")
 
     def _place_pattern(self) -> None:
-        """Place the '42' pattern in the center if dimensions allow."""
+        """Embed the centered '42' logo within the maze if space permits."""
         if (
             self.width < MIN_WIDTH_FOR_PATTERN
             or self.height < MIN_HEIGHT_FOR_PATTERN
@@ -83,54 +83,53 @@ class MazeGenerator:
             print("Notice: Maze size is too small to draw the '42' pattern.")
             return
 
-        start_x: int = (self.width - PATTERN_WIDTH) // 2
-        start_y: int = (self.height - PATTERN_HEIGHT) // 2
-        cells: set[Cell] = set()
+        origin_x: int = (self.width - PATTERN_WIDTH) // 2
+        origin_y: int = (self.height - PATTERN_HEIGHT) // 2
+        pattern: set[Cell] = set()
 
-        for r, row in enumerate(PATTERN_42):
-            for c, char in enumerate(row):
-                if char == "X":
-                    cells.add((start_x + c, start_y + r))
+        for row_idx, row in enumerate(PATTERN_42):
+            for col_idx, symbol in enumerate(row):
+                if symbol == "X":
+                    pattern.add((origin_x + col_idx, origin_y + row_idx))
 
-        if self.entry in cells or self.exit in cells:
+        if self.entry in pattern or self.exit in pattern:
             raise ValueError("Entry or exit cannot be inside the 42 pattern.")
 
-        self.pattern_cells = cells
+        self.pattern_cells = pattern
         self.pattern_drawn = True
 
     def _in_bounds(self, x: int, y: int) -> bool:
-        """Check if coordinates (x, y) are within the maze bounds."""
+        """Determine whether point (x, y) lies inside the maze rectangle."""
         return 0 <= x < self.width and 0 <= y < self.height
 
     def _open_wall(self, x: int, y: int, direction: Direction) -> None:
-        """Open the wall between cell (x, y) and its neighbor in direction."""
-        nx: int = x + direction.dx
-        ny: int = y + direction.dy
-        if self._in_bounds(nx, ny):
+        """Clear boundary walls between (x, y) and its adjacent neighbor."""
+        target_x: int = x + direction.dx
+        target_y: int = y + direction.dy
+        if self._in_bounds(target_x, target_y):
             self.grid[y][x] &= ~direction.bit
-            self.grid[ny][nx] &= ~direction.opposite_bit
+            self.grid[target_y][target_x] &= ~direction.opposite_bit
 
     def _close_wall(self, x: int, y: int, direction: Direction) -> None:
-        """Close the wall between cell (x, y) and its neighbor in direction."""
-        nx: int = x + direction.dx
-        ny: int = y + direction.dy
-        if self._in_bounds(nx, ny):
+        """Restore boundary walls between (x, y) and its adjacent neighbor."""
+        target_x: int = x + direction.dx
+        target_y: int = y + direction.dy
+        if self._in_bounds(target_x, target_y):
             self.grid[y][x] |= direction.bit
-            self.grid[ny][nx] |= direction.opposite_bit
+            self.grid[target_y][target_x] |= direction.opposite_bit
 
     def _open_count(self, x: int, y: int) -> int:
-        """Return the number of open passages of a cell."""
-        closed_walls: int = self.grid[y][x].bit_count()
-        return 4 - closed_walls
+        """Calculate the total number of open corridors for a cell."""
+        return 4 - self.grid[y][x].bit_count()
 
     def _is_dead_end(self, x: int, y: int) -> bool:
-        """Return True if the cell has exactly one open passage."""
+        """Identify if a cell is an isolated branch with only one exit."""
         if (x, y) in self.pattern_cells:
             return False
         return self._open_count(x, y) == 1
 
     def _block_is_open(self, bx: int, by: int) -> bool:
-        """Return True if the 3x3 block at (bx, by) has no inner walls."""
+        """Check whether a 3x3 square is completely devoid of inner walls."""
         if bx < 0 or by < 0 or bx + 3 > self.width or by + 3 > self.height:
             return False
         for y in range(by, by + 3):
@@ -142,162 +141,171 @@ class MazeGenerator:
         return True
 
     def _makes_open_area(self, x: int, y: int, direction: Direction) -> bool:
-        """Check if opening a wall would create an illegal 3x3 open area."""
-        nx: int = x + direction.dx
-        ny: int = y + direction.dy
+        """Test if removing a wall introduces an unauthorized open space."""
+        target_x: int = x + direction.dx
+        target_y: int = y + direction.dy
         self._open_wall(x, y, direction)
-        found: bool = False
-        for by in range(max(y, ny) - 2, min(y, ny) + 1):
-            for bx in range(max(x, nx) - 2, min(x, nx) + 1):
+        has_open_square: bool = False
+        for by in range(max(y, target_y) - 2, min(y, target_y) + 1):
+            for bx in range(max(x, target_x) - 2, min(x, target_x) + 1):
                 if self._block_is_open(bx, by):
-                    found = True
+                    has_open_square = True
         self._close_wall(x, y, direction)
-        return found
+        return has_open_square
 
     def _wall_candidates(self, x: int, y: int) -> list[Direction]:
-        """Return closed walls of (x, y) that can safely be opened."""
-        candidates: list[Direction] = []
+        """Collect all closed walls that can be knocked down safely."""
+        safe_walls: list[Direction] = []
         for d in DIRECTIONS:
-            nx: int = x + d.dx
-            ny: int = y + d.dy
-            if not self._in_bounds(nx, ny):
-                continue
-            if (nx, ny) in self.pattern_cells:
+            target_x: int = x + d.dx
+            target_y: int = y + d.dy
+            if (
+                not self._in_bounds(target_x, target_y)
+                or (target_x, target_y) in self.pattern_cells
+            ):
                 continue
             if not (self.grid[y][x] & d.bit):
                 continue
             if self._makes_open_area(x, y, d):
                 continue
-            candidates.append(d)
-        return candidates
+            safe_walls.append(d)
+        return safe_walls
 
     def count_loops(self) -> int:
-        """Return the number of independent loops in the maze."""
-        open_hall: int = 0
-        cells_count: int = 0
+        """Count cyclomatic cycles using graph Euler characteristics."""
+        corridors: int = 0
+        active_cells: int = 0
         for y in range(self.height):
             for x in range(self.width):
                 if (x, y) in self.pattern_cells:
                     continue
-                cells_count += 1
+                active_cells += 1
                 if (
                     x + 1 < self.width
                     and (x + 1, y) not in self.pattern_cells
+                    and not (self.grid[y][x] & EAST)
                 ):
-                    if not (self.grid[y][x] & EAST):
-                        open_hall += 1
+                    corridors += 1
                 if (
                     y + 1 < self.height
                     and (x, y + 1) not in self.pattern_cells
+                    and not (self.grid[y][x] & SOUTH)
                 ):
-                    if not (self.grid[y][x] & SOUTH):
-                        open_hall += 1
-        if cells_count == 0:
+                    corridors += 1
+        if active_cells == 0:
             return 0
-        return max(0, open_hall - cells_count + 1)
+        return max(0, corridors - active_cells + 1)
 
     def _remove_dead_ends(self) -> None:
-        """Open walls at dead-ends to eliminate dead ends."""
-        dead_ends: list[Cell] = [
-            (x, y)
-            for y in range(self.height)
-            for x in range(self.width)
-            if self._is_dead_end(x, y)
-        ]
-        self._rng.shuffle(dead_ends)
-        for x, y in dead_ends:
+        """Eliminate dead ends by opening walls towards adjacent paths."""
+        dead_cells: list[Cell] = []
+        for y in range(self.height):
+            for x in range(self.width):
+                if self._is_dead_end(x, y):
+                    dead_cells.append((x, y))
+
+        self._rng.shuffle(dead_cells)
+        for x, y in dead_cells:
             if not self._is_dead_end(x, y):
                 continue
-            candidates = self._wall_candidates(x, y)
-            if not candidates:
+            safe_walls = self._wall_candidates(x, y)
+            if not safe_walls:
                 continue
-            best = [
-                d for d in candidates
+            paired_dead_ends = [
+                d for d in safe_walls
                 if self._is_dead_end(x + d.dx, y + d.dy)
             ]
-            d = self._rng.choice(best if best else candidates)
-            self._open_wall(x, y, d)
+            chosen_dir = self._rng.choice(
+                paired_dead_ends if paired_dead_ends else safe_walls
+            )
+            self._open_wall(x, y, chosen_dir)
 
     def _add_minimum_loops(self) -> None:
-        """Ensure the maze has at least MIN_LOOPS independent loops."""
-        cells: list[Cell] = [
-            (x, y)
-            for y in range(self.height)
-            for x in range(self.width)
-            if (x, y) not in self.pattern_cells
-        ]
-        self._rng.shuffle(cells)
-        for x, y in cells:
+        """Inject cycles until MIN_LOOPS threshold is guaranteed."""
+        available_cells: list[Cell] = []
+        for y in range(self.height):
+            for x in range(self.width):
+                if (x, y) not in self.pattern_cells:
+                    available_cells.append((x, y))
+
+        self._rng.shuffle(available_cells)
+        for x, y in available_cells:
             if self.count_loops() >= MIN_LOOPS:
                 return
-            candidates = self._wall_candidates(x, y)
-            if candidates:
-                self._open_wall(x, y, self._rng.choice(candidates))
+            safe_walls = self._wall_candidates(x, y)
+            if safe_walls:
+                self._open_wall(x, y, self._rng.choice(safe_walls))
 
     def _braid(self) -> None:
-        """Add loops and reduce dead-ends for Pac-Man mode."""
+        """Transform perfect tree maze into looped topology for Pac-Man."""
         self._remove_dead_ends()
         self._add_minimum_loops()
 
     def _carve_dfs(self, start_x: int, start_y: int) -> None:
-        """Carve maze passages using randomized Depth-First Search."""
+        """Excavate maze paths using randomized depth-first search."""
         visited: set[Cell] = {(start_x, start_y)}
         visited.update(self.pattern_cells)
         stack: list[Cell] = [(start_x, start_y)]
 
         while stack:
-            cx, cy = stack[-1]
+            curr_x, curr_y = stack[-1]
             unvisited: list[tuple[Direction, int, int]] = []
             for d in DIRECTIONS:
-                nx: int = cx + d.dx
-                ny: int = cy + d.dy
-                if self._in_bounds(nx, ny) and (nx, ny) not in visited:
-                    unvisited.append((d, nx, ny))
+                next_x: int = curr_x + d.dx
+                next_y: int = curr_y + d.dy
+                if (
+                    self._in_bounds(next_x, next_y)
+                    and (next_x, next_y) not in visited
+                ):
+                    unvisited.append((d, next_x, next_y))
 
             if unvisited:
-                direction, nx, ny = self._rng.choice(unvisited)
-                self._open_wall(cx, cy, direction)
-                visited.add((nx, ny))
-                stack.append((nx, ny))
+                direction, next_x, next_y = self._rng.choice(unvisited)
+                self._open_wall(curr_x, curr_y, direction)
+                visited.add((next_x, next_y))
+                stack.append((next_x, next_y))
             else:
                 stack.pop()
 
     def _solve_bfs(self) -> None:
-        """Find the shortest path from entry to exit using BFS."""
+        """Compute the shortest path across the maze using BFS."""
         if self.entry == self.exit:
             self.solution = ""
             self.solution_cells = [self.entry]
             return
 
-        queue: deque[Cell] = deque([self.entry])
+        frontier: deque[Cell] = deque([self.entry])
         visited: set[Cell] = {self.entry}
-        parent: dict[Cell, tuple[Cell, str]] = {}
+        came_from: dict[Cell, tuple[Cell, str]] = {}
 
-        while queue:
-            cx, cy = queue.popleft()
-            if (cx, cy) == self.exit:
+        while frontier:
+            pos_x, pos_y = frontier.popleft()
+            if (pos_x, pos_y) == self.exit:
                 break
 
             for d in DIRECTIONS:
-                if not (self.grid[cy][cx] & d.bit):
-                    nx: int = cx + d.dx
-                    ny: int = cy + d.dy
-                    if self._in_bounds(nx, ny) and (nx, ny) not in visited:
-                        visited.add((nx, ny))
-                        parent[(nx, ny)] = ((cx, cy), d.name)
-                        queue.append((nx, ny))
+                if not (self.grid[pos_y][pos_x] & d.bit):
+                    next_x: int = pos_x + d.dx
+                    next_y: int = pos_y + d.dy
+                    if (
+                        self._in_bounds(next_x, next_y)
+                        and (next_x, next_y) not in visited
+                    ):
+                        visited.add((next_x, next_y))
+                        came_from[(next_x, next_y)] = ((pos_x, pos_y), d.name)
+                        frontier.append((next_x, next_y))
 
-        curr: Cell = self.exit
-        path_cells: list[Cell] = [curr]
+        step_cell: Cell = self.exit
+        path_cells: list[Cell] = [step_cell]
         path_chars: list[str] = []
 
-        while curr != self.entry:
-            if curr not in parent:
+        while step_cell != self.entry:
+            if step_cell not in came_from:
                 return
-            prev_cell, char = parent[curr]
+            prev_cell, char = came_from[step_cell]
             path_chars.append(char)
             path_cells.append(prev_cell)
-            curr = prev_cell
+            step_cell = prev_cell
 
         path_chars.reverse()
         path_cells.reverse()
@@ -305,16 +313,12 @@ class MazeGenerator:
         self.solution_cells = path_cells
 
     def generate(self) -> "MazeGenerator":
-        """Generate a random maze grid using seeded DFS algorithm."""
+        """Build the maze layout and calculate its solution."""
         self._rng.seed(self.seed)
-        grid: list[list[int]] = []
-        for _ in range(self.height):
-            row: list[int] = []
-            for _ in range(self.width):
-                row.append(ALL_WALLS)
-            grid.append(row)
-        self.grid = grid
-
+        self.grid = [
+            [ALL_WALLS for _ in range(self.width)]
+            for _ in range(self.height)
+        ]
         self._place_pattern()
         self._carve_dfs(self.entry[0], self.entry[1])
         if not self.perfect:

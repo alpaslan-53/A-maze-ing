@@ -1,7 +1,4 @@
-"""Data models and constants for maze generation.
-
-Defines wall bitmasks, cell coordinates, and cardinal directions.
-"""
+"""Data models and constants representing maze structures and geometry."""
 
 from typing import NamedTuple
 
@@ -16,15 +13,7 @@ Cell = tuple[int, int]
 
 
 class Direction(NamedTuple):
-    """Represents a movement direction and its wall bitmasks.
-
-    Attributes:
-        name: Direction letter ('N', 'E', 'S', 'W').
-        dx: Change in x-coordinate (columns).
-        dy: Change in y-coordinate (rows).
-        bit: Wall bitmask for the current cell.
-        opposite_bit: Corresponding wall bitmask for the neighbor.
-    """
+    """Encapsulates a movement vector and corresponding wall bitmasks."""
 
     name: str
     dx: int
