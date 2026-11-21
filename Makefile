@@ -4,7 +4,7 @@ CONFIG = config.txt
 MYPY_FLAGS = --warn-return-any --warn-unused-ignores \
 	--ignore-missing-imports --disallow-untyped-defs --check-untyped-defs
 
-.PHONY: install run debug clean lint lint-strict
+.PHONY: install run debug clean lint lint-strict build
 
 install:
 	$(PYTHON) -m pip install -r requirements.txt
@@ -26,3 +26,6 @@ lint:
 lint-strict:
 	flake8 .
 	mypy . --strict
+
+build:
+	$(PYTHON) -m build --wheel
