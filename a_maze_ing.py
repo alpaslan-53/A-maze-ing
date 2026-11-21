@@ -1,8 +1,4 @@
-"""A-Maze-ing application runner and interactive console interface.
-
-Usage:
-    python3 a_maze_ing.py config.txt
-"""
+"""A-Maze-ing main program and interactive terminal menu."""
 
 import random
 import sys
@@ -13,96 +9,104 @@ from maze_writer import write_maze
 from mazegen import MazeGenerator
 
 
-def build_maze(config: MazeConfig, seed: int | None) -> MazeGenerator:
-    """Instantiate and construct a maze instance using the provided config."""
-    generator = MazeGenerator(
+def generate_new_maze(
+    config: MazeConfig, seed_number: int | None
+) -> MazeGenerator:
+    """Create and return a generated maze using config settings."""
+    maze = MazeGenerator(
         width=config.width,
         height=config.height,
         entry=config.entry,
         exit=config.exit,
-        seed=seed,
+        seed=seed_number,
         perfect=config.perfect,
     )
-    generator.generate()
-    return generator
+    maze.generate()
+    return maze
 
 
-def save(maze: MazeGenerator, path: str) -> bool:
-    """Safely persist the maze to file without raising fatal exceptions."""
+def save_to_file(maze: MazeGenerator, file_path: str) -> bool:
+    """Write the maze to a file. Return False if writing fails."""
     try:
-        write_maze(maze, path)
-    except OSError as err:
-        print(
-            f"Error: cannot write '{path}': {err.strerror}",
-            file=sys.stderr,
-        )
+        write_maze(maze, file_path)
+        return True
+    except OSError as error:
+        print(f"Error: cannot write '{file_path}': {error}", file=sys.stderr)
         return False
-    return True
 
 
-def run_menu(config: MazeConfig, maze: MazeGenerator) -> None:
-    """Handle interactive terminal navigation and user commands."""
-    rng = random.Random(config.seed)
-    display_path: bool = False
-    wall_color_idx: int = 0
-    pattern_color_idx: int = 0
-    notice: str = ""
+def open_menu(config: MazeConfig, maze: MazeGenerator) -> None:
+    """Display the maze and handle user choices (1-5) in a loop."""
+    show_solution: bool = False
+    wall_index: int = 0
+    pattern_index: int = 0
+    error_message: str = ""
 
     while True:
-        show(
-            maze,
-            display_path,
-            WALL_COLOURS[wall_color_idx],
-            PATTERN_COLOURS[pattern_color_idx],
-        )
+        current_wall_color = WALL_COLOURS[wall_index]
+        current_pattern_color = PATTERN_COLOURS[pattern_index]
+
+        show(maze, show_solution, current_wall_color, current_pattern_color)
         print_menu()
-        if notice:
-            print(notice)
-            notice = ""
+
+        if error_message != "":
+            print(error_message)
+            error_message = ""
 
         try:
-            user_input = input("Choice? (1-5): ").strip()
+            choice = input("Choice? (1-5): ").strip()
         except (EOFError, KeyboardInterrupt):
             print()
             return
 
-        if user_input == "1":
+        if choice == "1":
             try:
-                next_seed = rng.randrange(2**32)
-                maze = build_maze(config, next_seed)
-            except ValueError as err:
-                print(f"Error: {err}", file=sys.stderr)
+                random_seed = random.randint(1, 100000)
+                maze = generate_new_maze(config, random_seed)
+            except ValueError as error:
+                print(f"Error: {error}", file=sys.stderr)
                 return
-            save(maze, config.output_file)
-        elif user_input == "2":
-            display_path = not display_path
-        elif user_input == "3":
-            wall_color_idx = (wall_color_idx + 1) % len(WALL_COLOURS)
-        elif user_input == "4":
-            pattern_color_idx = (pattern_color_idx + 1) % len(PATTERN_COLOURS)
-        elif user_input == "5":
+            save_to_file(maze, config.output_file)
+
+        elif choice == "2":
+            if show_solution is True:
+                show_solution = False
+            else:
+                show_solution = True
+
+        elif choice == "3":
+            wall_index = wall_index + 1
+            if wall_index == len(WALL_COLOURS):
+                wall_index = 0
+
+        elif choice == "4":
+            pattern_index = pattern_index + 1
+            if pattern_index == len(PATTERN_COLOURS):
+                pattern_index = 0
+
+        elif choice == "5":
             return
+
         else:
-            notice = "Invalid choice: type a number from 1 to 5."
+            error_message = "Invalid choice: type a number from 1 to 5."
 
 
 def main() -> int:
-    """Parse CLI arguments, initialize maze state, and launch UI loop."""
+    """Start the program, catch any errors, and return an exit code."""
     if len(sys.argv) != 2:
         print("Usage: python3 a_maze_ing.py config.txt", file=sys.stderr)
         return 1
 
+    config_file_path = sys.argv[1]
+
     try:
-        settings = load_config(sys.argv[1])
-        active_maze = build_maze(settings, settings.seed)
-        if not save(active_maze, settings.output_file):
+        config = load_config(config_file_path)
+        maze = generate_new_maze(config, config.seed)
+        if not save_to_file(maze, config.output_file):
             return 1
-        run_menu(settings, active_maze)
-    except ConfigError as err:
-        print(f"Error: {err}", file=sys.stderr)
-        return 1
-    except ValueError as err:
-        print(f"Error: {err}", file=sys.stderr)
+        open_menu(config, maze)
+    except (ConfigError, ValueError) as error:
+        print(f"Error: {error}", file=sys.stderr)
         return 1
 
     return 0
