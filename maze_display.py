@@ -1,9 +1,4 @@
-"""Terminal display of the maze (colored blocks, ANSI codes).
-
-Each cell is drawn with a grid of tiles: the maze (width x height cells)
-becomes (2*width+1) x (2*height+1) tiles. A tile is 2 characters wide so
-that it looks like a square.
-"""
+"""ANSI terminal visualizer for colorful grid-based maze display."""
 
 import sys
 from mazegen.model import EAST, SOUTH
@@ -20,51 +15,55 @@ CLEAR_SCREEN: str = "\033[H\033[2J"
 
 
 def _join_pattern_tiles(maze: object, tiles: list[list[str]]) -> None:
-    """Fill gaps between adjacent '42' cells so the pattern looks solid."""
-    cells = getattr(maze, "pattern_cells", set())
-    for x, y in cells:
-        if (x + 1, y) in cells:
-            tiles[2 * y + 1][2 * x + 2] = "pattern"
-        if (x, y + 1) in cells:
-            tiles[2 * y + 2][2 * x + 1] = "pattern"
-        if {(x + 1, y), (x, y + 1), (x + 1, y + 1)} <= cells:
-            tiles[2 * y + 2][2 * x + 2] = "pattern"
+    """Connect adjacent '42' pattern blocks so the glyph renders unbroken."""
+    pattern_coords = getattr(maze, "pattern_cells", set())
+    for px, py in pattern_coords:
+        if (px + 1, py) in pattern_coords:
+            tiles[2 * py + 1][2 * px + 2] = "pattern"
+        if (px, py + 1) in pattern_coords:
+            tiles[2 * py + 2][2 * px + 1] = "pattern"
+        if {(px + 1, py), (px, py + 1), (px + 1, py + 1)} <= pattern_coords:
+            tiles[2 * py + 2][2 * px + 2] = "pattern"
 
 
 def build_tiles(maze: object, show_path: bool) -> list[list[str]]:
-    """Convert the maze into a grid of tile names."""
-    width: int = getattr(maze, "width")
-    height: int = getattr(maze, "height")
-    grid: list[list[int]] = getattr(maze, "grid")
-    pattern_cells = getattr(maze, "pattern_cells", set())
+    """Transform abstract grid cells into a 2D tile canvas."""
+    grid_w: int = getattr(maze, "width")
+    grid_h: int = getattr(maze, "height")
+    cell_matrix: list[list[int]] = getattr(maze, "grid")
+    pattern_coords = getattr(maze, "pattern_cells", set())
 
-    tiles: list[list[str]] = [
-        ["wall"] * (2 * width + 1) for _ in range(2 * height + 1)
+    canvas_tiles: list[list[str]] = [
+        ["wall"] * (2 * grid_w + 1) for _ in range(2 * grid_h + 1)
     ]
-    for y in range(height):
-        for x in range(width):
-            is_pattern = (x, y) in pattern_cells
-            tiles[2 * y + 1][2 * x + 1] = "pattern" if is_pattern else "open"
-            if x + 1 < width and not (grid[y][x] & EAST):
-                tiles[2 * y + 1][2 * x + 2] = "open"
-            if y + 1 < height and not (grid[y][x] & SOUTH):
-                tiles[2 * y + 2][2 * x + 1] = "open"
+    for row in range(grid_h):
+        for col in range(grid_w):
+            is_logo = (col, row) in pattern_coords
+            canvas_tiles[2 * row + 1][2 * col + 1] = (
+                "pattern" if is_logo else "open"
+            )
+            if col + 1 < grid_w and not (cell_matrix[row][col] & EAST):
+                canvas_tiles[2 * row + 1][2 * col + 2] = "open"
+            if row + 1 < grid_h and not (cell_matrix[row][col] & SOUTH):
+                canvas_tiles[2 * row + 2][2 * col + 1] = "open"
 
-    _join_pattern_tiles(maze, tiles)
+    _join_pattern_tiles(maze, canvas_tiles)
 
     if show_path:
-        solution_cells = getattr(maze, "solution_cells", [])
-        for cx, cy in solution_cells:
-            tiles[2 * cy + 1][2 * cx + 1] = "path"
-        for (ax, ay), (bx, by) in zip(solution_cells, solution_cells[1:]):
-            tiles[ay + by + 1][ax + bx + 1] = "path"
+        solution_nodes = getattr(maze, "solution_cells", [])
+        for sx, sy in solution_nodes:
+            canvas_tiles[2 * sy + 1][2 * sx + 1] = "path"
+        for (x1, y1), (x2, y2) in zip(solution_nodes, solution_nodes[1:]):
+            canvas_tiles[y1 + y2 + 1][x1 + x2 + 1] = "path"
 
-    entry: tuple[int, int] = getattr(maze, "entry", (0, 0))
-    exit_c: tuple[int, int] = getattr(maze, "exit", (width - 1, height - 1))
-    tiles[2 * entry[1] + 1][2 * entry[0] + 1] = "entry"
-    tiles[2 * exit_c[1] + 1][2 * exit_c[0] + 1] = "exit"
+    start_pos: tuple[int, int] = getattr(maze, "entry", (0, 0))
+    finish_pos: tuple[int, int] = getattr(
+        maze, "exit", (grid_w - 1, grid_h - 1)
+    )
+    canvas_tiles[2 * start_pos[1] + 1][2 * start_pos[0] + 1] = "entry"
+    canvas_tiles[2 * finish_pos[1] + 1][2 * finish_pos[0] + 1] = "exit"
 
-    return tiles
+    return canvas_tiles
 
 
 def render(
@@ -73,8 +72,8 @@ def render(
     wall_colour: int,
     pattern_colour: int,
 ) -> str:
-    """Return the colored text picture of the maze."""
-    colours: dict[str, int] = {
+    """Generate color-coded terminal text representation of the maze."""
+    palette: dict[str, int] = {
         "wall": wall_colour,
         "open": OPEN_COLOUR,
         "path": PATH_COLOUR,
@@ -82,11 +81,11 @@ def render(
         "exit": EXIT_COLOUR,
         "pattern": pattern_colour,
     }
-    lines: list[str] = []
-    for row in build_tiles(maze, show_path):
-        line = "".join(f"\033[48;5;{colours[name]}m  " for name in row)
-        lines.append(line + RESET)
-    return "\n".join(lines)
+    rendered_rows: list[str] = []
+    for tile_row in build_tiles(maze, show_path):
+        row_str = "".join(f"\033[48;5;{palette[name]}m  " for name in tile_row)
+        rendered_rows.append(row_str + RESET)
+    return "\n".join(rendered_rows)
 
 
 def show(
@@ -95,14 +94,16 @@ def show(
     wall_colour: int,
     pattern_colour: int,
 ) -> None:
-    """Clear the screen on a terminal and print the maze with status info."""
+    """Render the maze in terminal alongside generation parameters."""
     if sys.stdout.isatty():
         print(CLEAR_SCREEN, end="")
     print(render(maze, show_path, wall_colour, pattern_colour))
-    seed = getattr(maze, "seed", None)
-    perfect = getattr(maze, "perfect", True)
-    sol_len = len(getattr(maze, "solution", ""))
-    print(f"Seed: {seed} | Perfect: {perfect} | Path length: {sol_len}")
+    cur_seed = getattr(maze, "seed", None)
+    cur_perfect = getattr(maze, "perfect", True)
+    path_len = len(getattr(maze, "solution", ""))
+    print(
+        f"Seed: {cur_seed} | Perfect: {cur_perfect} | Path length: {path_len}"
+    )
     if not getattr(maze, "pattern_drawn", True):
         print(
             "Warning: Maze is too small for the '42' pattern (min 9x7), "
@@ -112,7 +113,7 @@ def show(
 
 
 def print_menu() -> None:
-    """Print the interactive menu options."""
+    """Display interactive console actions for user control."""
     print("=== A-Maze-ing ===")
     print("1. Re-generate a new maze")
     print("2. Show / Hide the shortest path")

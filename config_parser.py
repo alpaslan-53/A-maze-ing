@@ -4,14 +4,14 @@ from dataclasses import dataclass
 
 
 class ConfigError(ValueError):
-    """Raised when the configuration file is invalid or missing keys."""
+    """Raised when configuration values are malformed or missing."""
 
     pass
 
 
 @dataclass(frozen=True)
 class MazeConfig:
-    """Holds validated configuration values for maze generation."""
+    """Immutable container holding validated maze settings."""
 
     width: int
     height: int
@@ -23,34 +23,34 @@ class MazeConfig:
 
 
 def read_pairs(path: str) -> dict[str, str]:
-    """Read raw KEY=VALUE pairs from a configuration file."""
+    """Extract raw key-value definitions from the specified file."""
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            lines = f.readlines()
+        with open(path, "r", encoding="utf-8") as file_handle:
+            raw_lines = file_handle.readlines()
     except OSError as err:
         raise ConfigError(f"Cannot read config file '{path}': {err}")
 
-    pairs: dict[str, str] = {}
-    for line_no, raw_line in enumerate(lines, start=1):
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
+    config_map: dict[str, str] = {}
+    for line_idx, raw_line in enumerate(raw_lines, start=1):
+        content = raw_line.strip()
+        if not content or content.startswith("#"):
             continue
-        if "=" not in line:
-            raise ConfigError(f"Line {line_no}: missing '=' in '{line}'")
-        key, val = line.split("=", 1)
-        key, val = key.strip(), val.strip()
+        if "=" not in content:
+            raise ConfigError(f"Line {line_idx}: missing '=' in '{content}'")
+        key_part, val_part = content.split("=", 1)
+        key, val = key_part.strip(), val_part.strip()
         if not key or not val:
             raise ConfigError(
-                f"Line {line_no}: empty key or value in '{line}'"
+                f"Line {line_idx}: empty key or value in '{content}'"
             )
-        if key in pairs:
-            raise ConfigError(f"Line {line_no}: duplicate key '{key}'")
-        pairs[key] = val
-    return pairs
+        if key in config_map:
+            raise ConfigError(f"Line {line_idx}: duplicate key '{key}'")
+        config_map[key] = val
+    return config_map
 
 
 def to_int(name: str, value: str) -> int:
-    """Convert a string value to an integer, rejecting invalid formats."""
+    """Parse positive numerical digit string into an integer."""
     if not value.isascii() or not value.isdigit():
         raise ConfigError(
             f"'{name}' must be a non-negative integer, got '{value}'"
@@ -59,19 +59,19 @@ def to_int(name: str, value: str) -> int:
 
 
 def parse_coord(name: str, value: str) -> tuple[int, int]:
-    """Parse a coordinate string in 'x,y' format."""
-    parts = value.split(",")
-    if len(parts) != 2:
+    """Convert comma-separated coordinates 'x,y' into an integer pair."""
+    segments = value.split(",")
+    if len(segments) != 2:
         raise ConfigError(
             f"'{name}' must be in 'x,y' format, got '{value}'"
         )
-    x = to_int(f"{name}.x", parts[0].strip())
-    y = to_int(f"{name}.y", parts[1].strip())
-    return (x, y)
+    coord_x = to_int(f"{name}.x", segments[0].strip())
+    coord_y = to_int(f"{name}.y", segments[1].strip())
+    return (coord_x, coord_y)
 
 
 def parse_bool(name: str, value: str) -> bool:
-    """Parse a boolean string ('True' or 'False')."""
+    """Convert explicit boolean string to native bool."""
     if value == "True":
         return True
     if value == "False":
@@ -87,50 +87,55 @@ REQUIRED_KEYS = {
 
 
 def load_config(path: str) -> MazeConfig:
-    """Load, validate, and return the maze configuration from a file."""
-    pairs = read_pairs(path)
+    """Parse config file, enforce validation rules, and return config."""
+    config_map = read_pairs(path)
 
-    missing = REQUIRED_KEYS - set(pairs.keys())
-    if missing:
+    missing_keys = REQUIRED_KEYS - set(config_map.keys())
+    if missing_keys:
+        formatted = ", ".join(sorted(missing_keys))
+        raise ConfigError(f"Missing required key(s): {formatted}")
+
+    maze_w = to_int("WIDTH", config_map["WIDTH"])
+    maze_h = to_int("HEIGHT", config_map["HEIGHT"])
+    if maze_w < 2 or maze_h < 2:
         raise ConfigError(
-            f"Missing required key(s): {', '.join(sorted(missing))}"
+            f"Dimensions must be at least 2x2, got {maze_w}x{maze_h}"
+        )
+    if maze_w > 500 or maze_h > 500:
+        raise ConfigError(
+            f"Dimensions exceed maximum 500x500, got {maze_w}x{maze_h}"
         )
 
-    width = to_int("WIDTH", pairs["WIDTH"])
-    height = to_int("HEIGHT", pairs["HEIGHT"])
-    if width < 2 or height < 2:
-        raise ConfigError(
-            f"Dimensions must be at least 2x2, got {width}x{height}"
-        )
-    if width > 500 or height > 500:
-        raise ConfigError(
-            f"Dimensions exceed maximum 500x500, got {width}x{height}"
-        )
+    start_cell = parse_coord("ENTRY", config_map["ENTRY"])
+    end_cell = parse_coord("EXIT", config_map["EXIT"])
 
-    entry = parse_coord("ENTRY", pairs["ENTRY"])
-    exit_c = parse_coord("EXIT", pairs["EXIT"])
-
-    if not (0 <= entry[0] < width and 0 <= entry[1] < height):
+    if not (0 <= start_cell[0] < maze_w and 0 <= start_cell[1] < maze_h):
         raise ConfigError(
-            f"ENTRY {entry} is outside the maze (0..{width-1}, 0..{height-1})"
+            f"ENTRY {start_cell} is outside the maze "
+            f"(0..{maze_w - 1}, 0..{maze_h - 1})"
         )
-    if not (0 <= exit_c[0] < width and 0 <= exit_c[1] < height):
+    if not (0 <= end_cell[0] < maze_w and 0 <= end_cell[1] < maze_h):
         raise ConfigError(
-            f"EXIT {exit_c} is outside the maze (0..{width-1}, 0..{height-1})"
+            f"EXIT {end_cell} is outside the maze "
+            f"(0..{maze_w - 1}, 0..{maze_h - 1})"
         )
-    if entry == exit_c:
-        raise ConfigError(f"ENTRY and EXIT cannot be identical: {entry}")
+    if start_cell == end_cell:
+        raise ConfigError(f"ENTRY and EXIT cannot be identical: {start_cell}")
 
-    output_file = pairs["OUTPUT_FILE"]
-    perfect = parse_bool("PERFECT", pairs["PERFECT"])
-    seed = to_int("SEED", pairs["SEED"]) if "SEED" in pairs else None
+    target_file = config_map["OUTPUT_FILE"]
+    is_perfect = parse_bool("PERFECT", config_map["PERFECT"])
+    random_seed = (
+        to_int("SEED", config_map["SEED"])
+        if "SEED" in config_map
+        else None
+    )
 
     return MazeConfig(
-        width=width,
-        height=height,
-        entry=entry,
-        exit=exit_c,
-        output_file=output_file,
-        perfect=perfect,
-        seed=seed,
+        width=maze_w,
+        height=maze_h,
+        entry=start_cell,
+        exit=end_cell,
+        output_file=target_file,
+        perfect=is_perfect,
+        seed=random_seed,
     )
