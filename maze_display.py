@@ -1,6 +1,8 @@
 """ANSI terminal visualizer for colorful grid-based maze display."""
 
 import sys
+
+from mazegen import MazeGenerator
 from mazegen.model import EAST, SOUTH
 
 WALL_COLOURS: tuple[int, ...] = (255, 27, 34, 220, 208)
@@ -14,66 +16,102 @@ RESET: str = "\033[0m"
 CLEAR_SCREEN: str = "\033[H\033[2J"
 
 
-def _join_pattern_tiles(maze: object, tiles: list[list[str]]) -> None:
-    """Connect adjacent '42' pattern blocks so the glyph renders unbroken."""
-    pattern_coords = getattr(maze, "pattern_cells", set())
-    for px, py in pattern_coords:
-        if (px + 1, py) in pattern_coords:
-            tiles[2 * py + 1][2 * px + 2] = "pattern"
-        if (px, py + 1) in pattern_coords:
-            tiles[2 * py + 2][2 * px + 1] = "pattern"
-        if {(px + 1, py), (px, py + 1), (px + 1, py + 1)} <= pattern_coords:
-            tiles[2 * py + 2][2 * px + 2] = "pattern"
+def create_empty_tile_grid(width: int, height: int) -> list[list[str]]:
+    """Create a tile grid filled completely with wall tiles."""
+    total_rows = 2 * height + 1
+    total_cols = 2 * width + 1
+    tiles: list[list[str]] = []
+    for _ in range(total_rows):
+        tiles.append(["wall"] * total_cols)
+    return tiles
 
 
-def build_tiles(maze: object, show_path: bool) -> list[list[str]]:
-    """Transform abstract grid cells into a 2D tile canvas."""
-    grid_w: int = getattr(maze, "width")
-    grid_h: int = getattr(maze, "height")
-    cell_matrix: list[list[int]] = getattr(maze, "grid")
-    pattern_coords = getattr(maze, "pattern_cells", set())
+def carve_rooms_and_passages(
+    maze: MazeGenerator, tiles: list[list[str]]
+) -> None:
+    """Open room centers and remove walls where passages exist."""
+    for y in range(maze.height):
+        for x in range(maze.width):
+            tile_x = 2 * x + 1
+            tile_y = 2 * y + 1
 
-    canvas_tiles: list[list[str]] = [
-        ["wall"] * (2 * grid_w + 1) for _ in range(2 * grid_h + 1)
-    ]
-    for row in range(grid_h):
-        for col in range(grid_w):
-            is_logo = (col, row) in pattern_coords
-            canvas_tiles[2 * row + 1][2 * col + 1] = (
-                "pattern" if is_logo else "open"
-            )
-            if col + 1 < grid_w and not (cell_matrix[row][col] & EAST):
-                canvas_tiles[2 * row + 1][2 * col + 2] = "open"
-            if row + 1 < grid_h and not (cell_matrix[row][col] & SOUTH):
-                canvas_tiles[2 * row + 2][2 * col + 1] = "open"
+            if (x, y) in maze.pattern_cells:
+                tiles[tile_y][tile_x] = "pattern"
+            else:
+                tiles[tile_y][tile_x] = "open"
 
-    _join_pattern_tiles(maze, canvas_tiles)
+            cell_walls = maze.grid[y][x]
+            east_is_open = (cell_walls & EAST) == 0
+            south_is_open = (cell_walls & SOUTH) == 0
+
+            if x + 1 < maze.width and east_is_open:
+                tiles[tile_y][tile_x + 1] = "open"
+            if y + 1 < maze.height and south_is_open:
+                tiles[tile_y + 1][tile_x] = "open"
+
+
+def connect_pattern_blocks(
+    maze: MazeGenerator, tiles: list[list[str]]
+) -> None:
+    """Fill gaps between adjacent '42' pattern cells so it looks solid."""
+    pattern_cells = maze.pattern_cells
+    for x, y in pattern_cells:
+        tile_x = 2 * x + 1
+        tile_y = 2 * y + 1
+
+        has_right = (x + 1, y) in pattern_cells
+        has_below = (x, y + 1) in pattern_cells
+        has_diagonal = (x + 1, y + 1) in pattern_cells
+
+        if has_right:
+            tiles[tile_y][tile_x + 1] = "pattern"
+        if has_below:
+            tiles[tile_y + 1][tile_x] = "pattern"
+        if has_right and has_below and has_diagonal:
+            tiles[tile_y + 1][tile_x + 1] = "pattern"
+
+
+def draw_solution_path(
+    maze: MazeGenerator, tiles: list[list[str]]
+) -> None:
+    """Mark every cell along the shortest path and the gaps between them."""
+    path = maze.solution_cells
+    for index in range(len(path)):
+        x, y = path[index]
+        tiles[2 * y + 1][2 * x + 1] = "path"
+
+        if index + 1 < len(path):
+            next_x, next_y = path[index + 1]
+            gap_x = x + next_x + 1
+            gap_y = y + next_y + 1
+            tiles[gap_y][gap_x] = "path"
+
+
+def build_tiles(maze: MazeGenerator, show_path: bool) -> list[list[str]]:
+    """Build the full 2D tile map for the maze."""
+    tiles = create_empty_tile_grid(maze.width, maze.height)
+    carve_rooms_and_passages(maze, tiles)
+    connect_pattern_blocks(maze, tiles)
 
     if show_path:
-        solution_nodes = getattr(maze, "solution_cells", [])
-        for sx, sy in solution_nodes:
-            canvas_tiles[2 * sy + 1][2 * sx + 1] = "path"
-        for (x1, y1), (x2, y2) in zip(solution_nodes, solution_nodes[1:]):
-            canvas_tiles[y1 + y2 + 1][x1 + x2 + 1] = "path"
+        draw_solution_path(maze, tiles)
 
-    start_pos: tuple[int, int] = getattr(maze, "entry", (0, 0))
-    finish_pos: tuple[int, int] = getattr(
-        maze, "exit", (grid_w - 1, grid_h - 1)
-    )
-    canvas_tiles[2 * start_pos[1] + 1][2 * start_pos[0] + 1] = "entry"
-    canvas_tiles[2 * finish_pos[1] + 1][2 * finish_pos[0] + 1] = "exit"
+    entry_x, entry_y = maze.entry
+    exit_x, exit_y = maze.exit
+    tiles[2 * entry_y + 1][2 * entry_x + 1] = "entry"
+    tiles[2 * exit_y + 1][2 * exit_x + 1] = "exit"
 
-    return canvas_tiles
+    return tiles
 
 
 def render(
-    maze: object,
+    maze: MazeGenerator,
     show_path: bool,
     wall_colour: int,
     pattern_colour: int,
 ) -> str:
-    """Generate color-coded terminal text representation of the maze."""
-    palette: dict[str, int] = {
+    """Convert the tile map into ANSI colored terminal text."""
+    color_map: dict[str, int] = {
         "wall": wall_colour,
         "open": OPEN_COLOUR,
         "path": PATH_COLOUR,
@@ -81,30 +119,40 @@ def render(
         "exit": EXIT_COLOUR,
         "pattern": pattern_colour,
     }
-    rendered_rows: list[str] = []
-    for tile_row in build_tiles(maze, show_path):
-        row_str = "".join(f"\033[48;5;{palette[name]}m  " for name in tile_row)
-        rendered_rows.append(row_str + RESET)
-    return "\n".join(rendered_rows)
+
+    tiles = build_tiles(maze, show_path)
+    rendered_lines: list[str] = []
+
+    for tile_row in tiles:
+        colored_row = ""
+        for tile_name in tile_row:
+            color_code = color_map[tile_name]
+            colored_row = colored_row + f"\033[48;5;{color_code}m  "
+        rendered_lines.append(colored_row + RESET)
+
+    return "\n".join(rendered_lines)
 
 
 def show(
-    maze: object,
+    maze: MazeGenerator,
     show_path: bool,
     wall_colour: int,
     pattern_colour: int,
 ) -> None:
-    """Render the maze in terminal alongside generation parameters."""
+    """Clear the terminal screen and print the maze with status info."""
     if sys.stdout.isatty():
         print(CLEAR_SCREEN, end="")
-    print(render(maze, show_path, wall_colour, pattern_colour))
-    cur_seed = getattr(maze, "seed", None)
-    cur_perfect = getattr(maze, "perfect", True)
-    path_len = len(getattr(maze, "solution", ""))
+
+    maze_picture = render(maze, show_path, wall_colour, pattern_colour)
+    print(maze_picture)
+
+    path_length = len(maze.solution)
     print(
-        f"Seed: {cur_seed} | Perfect: {cur_perfect} | Path length: {path_len}"
+        f"Seed: {maze.seed} | Perfect: {maze.perfect} | "
+        f"Path length: {path_length}"
     )
-    if not getattr(maze, "pattern_drawn", True):
+
+    if not maze.pattern_drawn:
         print(
             "Warning: Maze is too small for the '42' pattern (min 9x7), "
             "pattern was omitted.",
@@ -113,7 +161,7 @@ def show(
 
 
 def print_menu() -> None:
-    """Display interactive console actions for user control."""
+    """Print the interactive menu options."""
     print("=== A-Maze-ing ===")
     print("1. Re-generate a new maze")
     print("2. Show / Hide the shortest path")
